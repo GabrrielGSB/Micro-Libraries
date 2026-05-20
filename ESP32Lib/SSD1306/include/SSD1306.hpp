@@ -53,10 +53,10 @@ public:
     void inverter(bool inverter_cores);
 
     // Funções de Desenho Básico (Framebuffer)
+    void desenharPixel(int x, int y, bool ligado);
+    void desenharChar(char caractere, int x, int y);
+    void escreverTexto(const char* texto, int x, int y);
     void limpar();
-    void desenhar_pixel(int x, int y, bool ligado);
-    void desenhar_caractere(int x, int y, char caractere);
-    void escrever_texto(int x, int y, const char* texto);
     
     // Atualiza a tela física com o que foi desenhado no FrameBuffer
     void atualizar();

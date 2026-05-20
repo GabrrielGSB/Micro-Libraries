@@ -80,7 +80,7 @@ void SSD1306::limpar() {
 }
 
 // Manipulação do Bit do Pixel usando Matemática de Ponteiros
-void SSD1306::desenhar_pixel(int x, int y, bool ligado) {
+void SSD1306::desenharPixel(int x, int y, bool ligado) {
     if (x < 0 || x >= largura || y < 0 || y >= altura) return; // Fora da tela
 
     // Calcula em qual "página" (linha de 8 pixels) e byte o pixel se encontra
@@ -94,7 +94,7 @@ void SSD1306::desenhar_pixel(int x, int y, bool ligado) {
     }
 }
 
-void SSD1306::desenhar_caractere(int x, int y, char caractere) {
+void SSD1306::desenharChar(char caractere, int x, int y) {
     // 1. Descobre a posição no array (O caractere espaço ' ' na tabela ASCII é 32. 
     // Subtraindo 32, o espaço vira o índice 0 da nossa matriz!)
     int indice = caractere - 32;
@@ -106,28 +106,29 @@ void SSD1306::desenhar_caractere(int x, int y, char caractere) {
     for (int linha = 0; linha < 13; linha++) {
         
         // Pega a linha atual (ex: 0x18)
-        uint8_t byte_atual = Bitmap::letters[indice][linha]; 
+        uint8_t byte_atual = letters[indice][linha]; 
         
         // 3. Varre os 8 bits de largura dessa linha
         for (int coluna = 0; coluna < 8; coluna++) {
             
-            // Verifica se o bit daquela coluna específica é 1
-            // Usamos a operação bit a bit AND (&) para testar o bit mais à esquerda (0x80)
-            if (byte_atual & (0x80 >> coluna)) {
-                desenhar_pixel(x + coluna, y + linha, true); // Acende
+            bool pixel_aceso = byte_atual & (0x80 >> coluna);
+            int y_desenho = y + (12 - linha);
+
+            if (pixel_aceso) {
+                desenharPixel(x + coluna, y_desenho, true); // Acende
             } else {
-                desenhar_pixel(x + coluna, y + linha, false); // Apaga (fundo transparente/preto)
+                desenharPixel(x + coluna, y_desenho, false); // Apaga (fundo transparente/preto)
             }
         }
     }
 }
 
-void SSD1306::escrever_texto(int x, int y, const char* texto) {
+void SSD1306::escreverTexto(const char* texto, int x, int y) {
     int cursor_x = x; // Controla onde a próxima letra vai ser desenhada
 
     // Lê a string inteira até encontrar o final ('\0')
     while (*texto) {
-        desenhar_caractere(cursor_x, y, *texto);
+        desenharChar(*texto, cursor_x, y);
         
         // Avança 8 pixels para a direita para desenhar a próxima letra ao lado
         cursor_x += 8; 

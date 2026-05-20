@@ -23,18 +23,21 @@ protected:
     void liberarCanal();
 
 public:
-    PWM(gpio_num_t numPino, uint32_t freq_hz, ledc_timer_bit_t res_bits = LEDC_TIMER_10_BIT);
+    // Construtor original (mantido para motores, LEDs, etc.)
+    PWM(gpio_num_t numPino, uint32_t freq_hz = 5000, ledc_timer_bit_t res_bits = LEDC_TIMER_10_BIT);
     
     ~PWM();
 
-    // --- Funcionalidades do PWM ---
+    // --- Funcionalidades Padrão do PWM ---
     void definirDuty(uint32_t duty);
     
-    // O fade transita o duty suavemente usando o próprio circuito do chip, sem usar o processador
+    // O fade transita o duty suavemente usando o próprio circuito do chip
     void fade(uint32_t duty_alvo, uint32_t tempo_ms);
     
     void pausar();
     void retomar();
+
+    void habilitarClockCamera(uint32_t frequencia_hz = 20000000);
 };
 
 #endif

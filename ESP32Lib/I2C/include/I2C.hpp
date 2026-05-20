@@ -34,15 +34,19 @@ public:
 
     // Envia um único byte de comando ou dado
     esp_err_t escrever(uint8_t endereco_dispositivo, uint8_t registo, uint8_t dado);
+    esp_err_t escrever(uint8_t endereco_dispositivo, uint16_t registrador, uint8_t dado);
     
     // Envia um pacote completo de dados (Essencial para desenhar pixels no ecrã SSD1306)
     esp_err_t escrever_bloco(uint8_t endereco_dispositivo, uint8_t registo, const uint8_t *dados, size_t tamanho);
 
     // Lê informações de sensores (Ex: pedir a temperatura a um sensor I2C)
     esp_err_t ler(uint8_t endereco_dispositivo, uint8_t registo, uint8_t *buffer_recepcao, size_t tamanho);
+    esp_err_t ler(uint8_t endereco_dispositivo, uint16_t registrador, uint8_t *buffer_recepcao, size_t tamanho);
     
     // Método utilitário para classes externas (como o display) saberem qual porta usar
     i2c_port_t getPorta();
+
+
 };
 
 #endif
