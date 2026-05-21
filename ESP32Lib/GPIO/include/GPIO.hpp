@@ -140,18 +140,17 @@ protected:
     uint8_t estado_atual;      
 
 public:
-    GPIO(gpio_num_t numPino, gpio_mode_t modoPino);
+    GPIO(gpio_num_t numPino, gpio_mode_t modoPino, gpio_pull_mode_t modoPull = NOPULL);
 
-    #pragma region OUTPUT
-        void ligar();
-        void desligar();
-        void inverter();
-    #pragma endregion
+    void ligar();
+    void desligar();
+    void inverter();
 
-    #pragma region INPUT
-        int ler();
-        void configPull(gpio_pull_mode_t modoPull);
-    #pragma endregion
+
+    int ler();
+    void configPull(gpio_pull_mode_t modoPull);
+
+    gpio_num_t getPino() const { return pino; }
 };
 
 #endif
