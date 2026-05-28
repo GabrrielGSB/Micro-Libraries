@@ -1,0 +1,179 @@
+#pragma once
+#ifndef I2C_HPP
+#define I2C_HPP
+
+#include "driver/i2c_master.h" 
+#include "esp_err.h"
+#include "GPIO.hpp"
+
+#define NORMAL_MODE 100000 
+#define FAST_MODE   400000 
+
+class I2C {
+protected:
+    i2c_port_t porta;
+    uint32_t frequencia_padrao;
+
+    static i2c_master_bus_handle_t bus_handle_0;
+    static i2c_master_bus_handle_t bus_handle_1;
+
+    i2c_master_dev_handle_t dispositivos[128];
+
+    i2c_master_dev_handle_t obter_dispositivo(uint8_t endereco);
+
+public:
+    I2C(i2c_port_t porta_i2c, gpio_num_t pino_sda, gpio_num_t pino_scl, uint32_t frequencia_hz = NORMAL_MODE);
+    ~I2C();
+
+    esp_err_t escrever(uint8_t endereco_dispositivo, uint8_t registrador, uint8_t dado);
+    esp_err_t escrever(uint8_t endereco_dispositivo, uint16_t registrador, uint8_t dado);
+    
+    esp_err_t escrever_bloco(uint8_t endereco_dispositivo, uint8_t registrador, const uint8_t *dados, size_t tamanho);
+
+    esp_err_t ler(uint8_t endereco_dispositivo, uint8_t registrador, uint8_t *buffer_recepcao, size_t tamanho);
+    esp_err_t ler(uint8_t endereco_dispositivo, uint16_t registrador, uint8_t *buffer_recepcao, size_t tamanho);
+    
+    i2c_port_t getPorta();
+};
+
+#endif
+
+
+
+
+
+#include "I2C.hpp"
+#include "esp_log.h"
+#include <string.h> // Para memset e memcpy
+#include <stdlib.h> // Para malloc e free
+
+static const char* TAG = "I2C_HAL_NOVO";
+
+// Inicialização dos ponteiros estáticos do barramento
+i2c_master_bus_handle_t I2C::bus_handle_0 = nullptr;
+i2c_master_bus_handle_t I2C::bus_handle_1 = nullptr;
+
+// ==========================================
+// CONSTRUTOR E DESTRUTOR
+// ==========================================
+
+I2C::I2C(i2c_port_t porta_i2c, gpio_num_t pino_sda, gpio_num_t pino_scl, uint32_t frequencia_hz) {
+    this->porta = porta_i2c;
+    this->frequencia_padrao = frequencia_hz;
+
+    // Inicia o array de dispositivos locais tudo com null (vazio)
+    memset(this->dispositivos, 0, sizeof(this->dispositivos));
+
+    // Define qual ponteiro de barramento usar
+    i2c_master_bus_handle_t* bus_ptr = (porta == I2C_NUM_0) ? &bus_handle_0 : &bus_handle_1;
+
+    // Se o barramento ainda não existir, nós o criamos!
+    if (*bus_ptr == nullptr) {
+        i2c_master_bus_config_t bus_config = {};
+        bus_config.i2c_port   = porta;
+        bus_config.sda_io_num = pino_sda;
+        bus_config.scl_io_num = pino_scl;
+        bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
+        bus_config.glitch_ignore_cnt = 7;
+        bus_config.flags.enable_internal_pullup = true; 
+
+        esp_err_t err = i2c_new_master_bus(&bus_config, bus_ptr);
+        
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "I2C inicializado na porta %d", porta);
+        } else {
+            ESP_LOGE(TAG, "Erro fatal ao inicializar o I2C na porta %d", porta);
+        }
+    } else {
+        ESP_LOGI(TAG, "Porta I2C %d já aberta. Compartilhando barramento.", porta);
+    }
+}
+
+I2C::~I2C() {
+    for (int i = 0; i < 128; i++) {
+        if (dispositivos[i] != nullptr) {
+            i2c_master_bus_rm_device(dispositivos[i]);
+        }
+    }
+    ESP_LOGW(TAG, "Objeto I2C destruído. Conexões limpas.");
+}
+
+// ==========================================
+// GERENCIADOR INTELIGENTE DE DISPOSITIVOS
+// ==========================================
+
+i2c_master_dev_handle_t I2C::obter_dispositivo(uint8_t endereco) {
+    // Se o dispositivo ainda não foi registrado neste objeto, cria-se agora
+    if (dispositivos[endereco] == nullptr) {
+        i2c_device_config_t dev_cfg = {};
+        dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+        dev_cfg.device_address  = endereco;
+        dev_cfg.scl_speed_hz    = this->frequencia_padrao;
+
+        i2c_master_bus_handle_t bus = (porta == I2C_NUM_0) ? bus_handle_0 : bus_handle_1;
+        
+        i2c_master_bus_add_device(bus, &dev_cfg, &dispositivos[endereco]);
+    }
+    return dispositivos[endereco];
+}
+
+// ==========================================
+// MÉTODOS DE COMUNICAÇÃO (EXTREMAMENTE LIMPOS AGORA)
+// ==========================================
+
+esp_err_t I2C::escrever_bloco(uint8_t endereco_dispositivo, uint8_t registrador, const uint8_t *dados, size_t tamanho) {
+    i2c_master_dev_handle_t dev = obter_dispositivo(endereco_dispositivo);
+    
+    uint8_t *buffer = (uint8_t*) malloc(tamanho + 1);
+    if (buffer == nullptr) return ESP_ERR_NO_MEM;
+
+    buffer[0] = registrador;
+    memcpy(&buffer[1], dados, tamanho);
+
+    // O "1000" representa o timeout em milissegundos
+    esp_err_t err = i2c_master_transmit(dev, buffer, tamanho + 1, 1000);
+    
+    free(buffer);
+    return err;
+}
+
+esp_err_t I2C::escrever(uint8_t endereco_dispositivo, uint8_t registrador, uint8_t dado) {
+    i2c_master_dev_handle_t dev = obter_dispositivo(endereco_dispositivo);
+
+    uint8_t buffer[2] = { registrador, dado };
+    
+    return i2c_master_transmit(dev, buffer, 2, 1000);
+}
+
+esp_err_t I2C::escrever(uint8_t endereco_dispositivo, uint16_t registrador, uint8_t dado) {
+    i2c_master_dev_handle_t dev = obter_dispositivo(endereco_dispositivo);
+    uint8_t buffer[3] = {
+        (uint8_t)(registrador >> 8),  // Byte Alto
+        (uint8_t)(registrador & 0xFF),// Byte Baixo
+        dado                          // Dado
+    };
+    return i2c_master_transmit(dev, buffer, 3, 1000);
+}
+
+esp_err_t I2C::ler(uint8_t endereco_dispositivo, uint8_t registrador, uint8_t *buffer_recepcao, size_t tamanho) {
+    if (tamanho == 0) return ESP_OK;
+    i2c_master_dev_handle_t dev = obter_dispositivo(endereco_dispositivo);
+    
+    // A nova API tem uma função feita especificamente para "Gravar Comando e depois Ler Dados"
+    return i2c_master_transmit_receive(dev, &registrador, 1, buffer_recepcao, tamanho, 1000);
+}
+
+esp_err_t I2C::ler(uint8_t endereco_dispositivo, uint16_t registrador, uint8_t *buffer_recepcao, size_t tamanho) {
+    if (tamanho == 0) return ESP_OK;
+    i2c_master_dev_handle_t dev = obter_dispositivo(endereco_dispositivo);
+    
+    uint8_t reg_buffer[2] = {
+        (uint8_t)(registrador >> 8),
+        (uint8_t)(registrador & 0xFF)
+    };
+    return i2c_master_transmit_receive(dev, reg_buffer, 2, buffer_recepcao, tamanho, 1000);
+}
+
+i2c_port_t I2C::getPorta() {
+    return porta;
+}
