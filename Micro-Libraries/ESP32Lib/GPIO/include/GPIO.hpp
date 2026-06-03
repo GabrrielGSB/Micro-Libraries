@@ -6,17 +6,17 @@
 #include "driver/gpio.h"
 
 #pragma region MODES
-    #define OUTPUT GPIO_MODE_OUTPUT 
-    #define INPUT GPIO_MODE_INPUT
+    #define OUTPUT       GPIO_MODE_OUTPUT 
+    #define INPUT        GPIO_MODE_INPUT
     #define INPUT_OUTPUT GPIO_MODE_INPUT_OUTPUT
-    #define PULLUP GPIO_PULLUP_ONLY
-    #define PULLDOWN GPIO_PULLDOWN_ONLY
-    #define NOPULL GPIO_FLOATING
-    #define OPEN_DRAIN GPIO_MODE_OUTPUT_OD
+    #define PULLUP       GPIO_PULLUP_ONLY
+    #define PULLDOWN     GPIO_PULLDOWN_ONLY
+    #define NOPULL       GPIO_FLOATING
+    #define OPEN_DRAIN   GPIO_MODE_OUTPUT_OD
 #pragma endregion
 
 #pragma region PINS
-    #if CONFIG_IDF_TARGET_ESP32
+    #if   CONFIG_IDF_TARGET_ESP32
         #define GPIO0 GPIO_NUM_0
         #define GPIO1 GPIO_NUM_1
         #define GPIO2 GPIO_NUM_2
@@ -148,9 +148,10 @@ public:
 
 
     int ler();
+
     void configPull(gpio_pull_mode_t modoPull);
 
-    gpio_num_t getPino() const { return pino; }
+    // gpio_num_t obterPino() const { return pino; }
 };
 
 #endif

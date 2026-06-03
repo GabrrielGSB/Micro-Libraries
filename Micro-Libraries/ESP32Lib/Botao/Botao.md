@@ -25,28 +25,20 @@ Classe derivada de `GPIO` que encapsula a lógica de leitura de botões físicos
 
 ---
 
-## Interface da classe
+## Interface publica da classe
 
 ```cpp
 class Botao : public GPIO {
 public:
-    Botao(gpio_num_t numPino, uint32_t debounce_ms = 200);
+    Botao(gpio_num_t numPino, uint32_t debounce_ms = 50); 
+    ~Botao(); 
 
-    int  estado();       // Leitura com debounce por software (polling)
-    int  estadoBruto();  // Leitura direta do pino, sem filtro
-
-    void definirInterrupcao(callback_t callback,
-                            gpio_int_type_t modo = FALLING);
+    int estado();
+    int estadoBruto(); 
+    
+    void definirInterrupcao(callback_t callback, gpio_int_type_t modo = FALLING);
 };
 ```
-
-O tipo do callback é:
-
-```cpp
-typedef void (*callback_t)();
-```
-
-> Significa que em algum main é preciso definir o callback apenas como `void`
 
 ---
 
@@ -76,7 +68,7 @@ Use quando o botão é verificado periodicamente dentro de um loop. O método re
 ```cpp
 // Retorna 0 quando pressionado (pull-up + botão ao GND)
 // Retorna 1 quando solto
-int nivel = botao.estado();
+bool estado = botao.estado();
 ```
 
 ### Exemplos 
@@ -117,7 +109,9 @@ void definirInterrupcao(callback_t callback, gpio_int_type_t modo = FALLING);
 | `callback` | `void (*)()`        | —         | Função chamada ao detectar a borda     |
 | `modo`     | `gpio_int_type_t`   | `FALLING` | Tipo de borda que dispara a interrupção|
 
-> **Atenção:** a função de callback é executada dentro de uma ISR. Ela deve ser curta e não pode chamar funções bloqueantes (`vTaskDelay`, `printf`, alocação de memória, etc.). Use flags ou filas do FreeRTOS para comunicação com o loop principal.
+> **Atenção:** a função de callback é executada dentro de uma ISR. Ela deve ser curta e não pode chamar funções bloqueantes (`vTaskDelay`, `printf`, alocação de memória, etc.). Use flags booleanas ou semáforos do FreeRTOS para comunicação com o loop principal.
+
+> **Atenção:** a função callback definida pelo usuário não é executada na interrupção, mas sim por uma task no freeRTOS.  
 
 ### Exemplos
 #### Interrupção simples
@@ -136,10 +130,6 @@ void ao_pressionar() {
 
 extern "C" void app_main() {
     botao.definirInterrupcao(ao_pressionar); // borda de descida (padrão)
-
-    while (true) {
-        delay_ms(1000);
-    }
 }
 ```
 
@@ -170,16 +160,6 @@ extern "C" void app_main() {
         delay_ms(10);
     }
 }
-```
-
----
-
-## Leitura bruta (`estadoBruto()`)
-
-Retorna o nível lógico atual do pino diretamente, sem nenhum filtro de debounce. Útil para diagnóstico ou quando o debounce é tratado externamente.
-
-```cpp
-int nivel = botao.estadoBruto(); // 0 ou 1
 ```
 
 ---
