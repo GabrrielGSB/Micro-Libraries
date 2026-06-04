@@ -166,14 +166,9 @@ extern "C" void app_main() {
 
 ## Resumo dos métodos
 
-| Método                  | Debounce | Bloqueante | Uso recomendado                         |
-|-------------------------|----------|------------|-----------------------------------------|
-| `estado()`              | ✅ Sim   | Não        | Polling periódico no loop               |
-| `estadoBruto()`         | ❌ Não   | Não        | Diagnóstico / debounce externo          |
-| `definirInterrupcao()`  | ✅ Sim   | Não        | Resposta imediata a eventos de hardware |
+| Método                 | Uso recomendado                         |
+|------------------------|-----------------------------------------|
+| `estado()`             | Polling periódico no loop               |
+| `definirInterrupcao()` | Resposta imediata a eventos de hardware, com funções de callback |
 
 ---
-
-### Observações sobre o serviço ISR
-
-> O serviço de interrupções do ESP-IDF (`gpio_install_isr_service`) é instalado automaticamente na primeira vez que `definirInterrupcao()` é chamado. Chamadas subsequentes em outros botões reutilizam o mesmo serviço — não há conflito nem reinstalação.

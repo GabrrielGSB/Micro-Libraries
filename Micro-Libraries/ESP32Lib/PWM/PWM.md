@@ -1,6 +1,6 @@
-# Classe `PWM` — Documentação de Uso
+# Classe `PWM`
 
-Classe derivada de `GPIO` que abstrai o periférico **LEDC** do ESP-IDF para geração de sinais PWM. Oferece alocação automática de canais, controle de duty cycle, fade suave por hardware e suporte a clock de alta frequência para câmeras e outros periféricos.
+Classe derivada de `GPIO` que abstrai o periférico **LEDC** do ESP-IDF para geração de sinais PWM. 
 
 ---
 
@@ -9,19 +9,96 @@ Classe derivada de `GPIO` que abstrai o periférico **LEDC** do ESP-IDF para ger
 | Arquivo / Biblioteca  | Papel                                              |
 |-----------------------|----------------------------------------------------|
 | `GPIO.hpp`            | Classe base — configura o pino como saída          |
-| `driver/ledc.h`       | Driver LEDC do ESP-IDF — periférico PWM do chip    |
+| `driver/ledc.h`       | Driver LEDC do ESP-IDF (periférico PWM do chip)    |
 | `esp_log.h`           | Log de erros e diagnóstico via serial              |
 
 ---
 
-## Conceitos do LEDC
+## O periférico LEDC em detalhes
 
-O ESP32 possui um periférico chamado **LEDC** (LED Control) que gera sinais PWM por hardware. Ele é organizado em:
+O **LEDC** (LED Control) é o módulo de hardware do ESP32 responsável por gerar sinais PWM. Apesar do nome remeter a LEDs, ele é de uso geral e serve para qualquer aplicação que exija um sinal com frequência e duty cycle controláveis: dimmers, motores, servos, buzzers, clocks para câmeras, entre outros.
 
-- **Timers** — definem a frequência e a resolução do sinal
-- **Canais** — vinculam um timer a um pino físico e controlam o duty cycle
+### Estrutura interna: timers e canais
 
-A classe `PWM` gerencia tudo isso automaticamente. Ao criar um objeto, um canal livre é reservado; ao destruí-lo, o canal é liberado para reuso.
+O LEDC é organizado em dois níveis hierárquicos:
+
+```
+┌─────────────────────────────────────────────┐
+│               Periférico LEDC               │
+│                                             │
+│  ┌──────────┐   ┌──────────┐                │
+│  │ Timer 0  │   │ Timer 1  │  ...           │
+│  │ freq/res │   │ freq/res │                │
+│  └────┬─────┘   └────┬─────┘                │
+│       │              │                      │
+│  ┌────┴──┐  ┌────┐  ┌┴───┐  ┌────┐          │
+│  │ Ch. 0 │  │Ch.1│  │Ch.2│  │Ch.3│  ...     │
+│  │ pino  │  │pino│  │pino│  │pino│          │
+│  │ duty  │  │duty│  │duty│  │duty│          │
+│  └───────┘  └────┘  └────┘  └────┘          │
+└─────────────────────────────────────────────┘
+```
+
+**Timers** definem dois parâmetros que valem para todos os canais vinculados a eles:
+
+- **Frequência** — quantos ciclos PWM por segundo (Hz)
+- **Resolução** — quantos bits de duty cycle estão disponíveis (8, 10, 12 bits, etc.)
+
+**Canais** são os responsáveis por materializar o sinal em um pino físico. Cada canal:
+
+- É vinculado a exatamente um timer (herda sua frequência e resolução)
+- É associado a um pino GPIO de saída
+- Possui seu próprio registrador de **duty cycle**, independente dos demais canais
+
+> Isso significa que múltiplos canais podem compartilhar o mesmo timer (mesma frequência) mas ter intensidades/dutys completamente diferentes — padrão ideal para controlar vários LEDs RGB ou múltiplos motores na mesma frequência.
+
+### Quantos canais existem?
+
+O número de canais varia por modelo:
+
+| Modelo    | Canais disponíveis (`LEDC_CHANNEL_MAX`) |
+|-----------|-----------------------------------------|
+| ESP32     | 8 (modo low-speed)                      |
+| ESP32-S3  | 8 (modo low-speed)                      |
+| ESP32-C3  | 6 (modo low-speed)                      |
+
+> A classe usa exclusivamente **low-speed mode** (`LEDC_LOW_SPEED_MODE`), que é compatível com todos os modelos suportados pela biblioteca.
+
+### Como o duty cycle é gerado pelo hardware
+
+A cada ciclo do timer, o hardware conta de `0` até `2^N - 1` (onde `N` é a resolução). O pino fica em nível alto enquanto o contador está abaixo do valor de duty configurado, e em nível baixo pelo restante do ciclo (tudo sem intervenção do software):
+
+```
+Resolução 10 bits → contador vai de 0 a 1023
+
+duty = 256 (~25%):    ▓▓░░░░░░░░░░░░░░  (256 ticks HIGH, 768 ticks LOW)
+duty = 512 (~50%):    ▓▓▓▓▓▓▓▓░░░░░░░░  (512 ticks HIGH, 512 ticks LOW)
+duty = 768 (~75%):    ▓▓▓▓▓▓▓▓▓▓▓▓░░░░  (768 ticks HIGH, 256 ticks LOW)
+```
+
+### A restrição frequência × resolução
+
+O timer do LEDC é alimentado por um clock interno (tipicamente **80 MHz** no APB_CLK). Para que o hardware consiga gerar `freq_hz` ciclos completos por segundo, cada ciclo precisa de `80 MHz / freq_hz` ticks de clock. Esse valor precisa ser pelo menos `2^N` (o tamanho do contador):
+
+$
+frequência × 2^{num_{bits}} ≤ clock_{fonte}  
+$
+
+Exemplos práticos:
+
+| Frequência | Resolução máxima | Valores de duty    |
+|------------|------------------|--------------------|
+| 5 kHz      | 13 bits          | 0 – 8191           |
+| 10 kHz     | 12 bits          | 0 – 4095           |
+| 20 kHz     | 11 bits          | 0 – 2047           |
+| 80 kHz     | 9 bits           | 0 – 511            |
+| 20 MHz     | 2 bits           | 0 – 3              |
+
+Violar essa relação faz o hardware silenciosamente gerar uma frequência errada. O ESP-IDF avisa nesse caso.
+
+### O serviço de fade
+
+O LEDC possui um circuito de **hardware fade** que interpola automaticamente o duty cycle entre dois valores ao longo de um tempo determinado. Ele usa interrupções internas para ajustar o registrador de duty a cada intervalo — sem consumir ciclos de CPU. O serviço de fade é instalado uma única vez pelo construtor da primeira instância `PWM` criada no programa.
 
 ---
 
@@ -35,8 +112,6 @@ A resolução define quantos níveis de duty cycle existem. Com `N` bits, o duty
 | `LEDC_TIMER_10_BIT` (padrão)   | 0 – 1023           | LEDs, motores           |
 | `LEDC_TIMER_12_BIT`            | 0 – 4095           | Controle de precisão    |
 | `LEDC_TIMER_2_BIT`             | 0 – 3              | Clock de câmera (XCLK)  |
-
-> **Regra de hardware:** `frequência × 2^resolução ≤ clock_fonte` (geralmente 80 MHz). Frequências altas exigem resoluções menores.
 
 ---
 
@@ -206,6 +281,23 @@ extern "C" void app_main() {
     motor.definirDuty(255);  // velocidade máxima
     delay_ms(2000);
     motor.definirDuty(0);    // para
+}
+```
+
+### Três LEDs com frequência comum e dutys independentes
+
+```cpp
+#include "PWM.hpp"
+
+extern "C" void app_main() {
+    // Todos a 5 kHz, mas cada um com seu próprio duty
+    PWM vermelho(GPIO4);
+    PWM verde(GPIO5);
+    PWM azul(GPIO6);
+
+    vermelho.definirDuty(800); // quase no máximo
+    verde.definirDuty(200);    // fraco
+    azul.definirDuty(512);     // 50%
 }
 ```
 

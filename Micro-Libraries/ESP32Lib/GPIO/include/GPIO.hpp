@@ -78,10 +78,10 @@
         #define GPIO19 GPIO_NUM_19
         #define GPIO20 GPIO_NUM_20
         #define GPIO21 GPIO_NUM_21
-        #define GPIO22 GPIO_NUM_22
-        #define GPIO23 GPIO_NUM_23
-        #define GPIO24 GPIO_NUM_24
-        #define GPIO25 GPIO_NUM_25
+        // #define GPIO22 GPIO_NUM_22
+        // #define GPIO23 GPIO_NUM_23
+        // #define GPIO24 GPIO_NUM_24
+        // #define GPIO25 GPIO_NUM_25
         #define GPIO26 GPIO_NUM_26
         #define GPIO27 GPIO_NUM_27
         #define GPIO28 GPIO_NUM_28
